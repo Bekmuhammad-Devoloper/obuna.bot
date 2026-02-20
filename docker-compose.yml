@@ -1,0 +1,53 @@
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: puloqimi-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - puloqimi-network
+
+  postgres:
+    image: postgres:14-alpine
+    container_name: puloqimi-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_DATABASE:-puloqimi_bot}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # Xavfsizlik: tashqi portni yopamiz
+    # ports:
+    #   - "${DB_PORT:-5432}:5432"
+    networks:
+      - puloqimi-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: puloqimi-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes ${REDIS_PASSWORD:+--requirepass $REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    # Xavfsizlik: tashqi portni yopamiz
+    # ports:
+    #   - "${REDIS_PORT:-6379}:6379"
+    networks:
+      - puloqimi-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  puloqimi-network:
+    driver: bridge

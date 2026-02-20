@@ -1,0 +1,92 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: obuna-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - obuna-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_DATABASE}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: obuna-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - obuna-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Telegram Bot Application
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: obuna-bot
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      BOT_TOKEN: ${BOT_TOKEN}
+      ADMIN_IDS: ${ADMIN_IDS}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_DATABASE: ${DB_DATABASE}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      PAYME_MERCHANT_ID: ${PAYME_MERCHANT_ID}
+      PAYME_SECRET_KEY: ${PAYME_SECRET_KEY}
+      PAYME_TEST_SECRET_KEY: ${PAYME_TEST_SECRET_KEY}
+      PAYME_CHECKOUT_URL: ${PAYME_CHECKOUT_URL}
+      APP_PORT: 3000
+      APP_URL: ${APP_URL}
+      ADMIN_API_TOKEN: ${ADMIN_API_TOKEN}
+      WEB_APP_URL: ${WEB_APP_URL}
+      NOTIFICATION_CHECK_HOUR: ${NOTIFICATION_CHECK_HOUR}
+      NOTIFICATION_CHECK_MINUTE: ${NOTIFICATION_CHECK_MINUTE}
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - obuna-network
+    volumes:
+      - ./logs:/app/logs
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  obuna-network:
+    driver: bridge

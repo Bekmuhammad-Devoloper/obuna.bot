@@ -1,0 +1,75 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
+            cd /root/obuna.bot
+            
+            echo "🔄 Pulling latest changes from GitHub..."
+            git pull origin main || git pull origin master
+            
+            echo "🛑 Stopping existing containers..."
+            docker compose -f docker-compose.prod.yml down
+            
+            echo "🗑️ Cleaning up old images..."
+            docker system prune -f
+            
+            echo "🔨 Building new images..."
+            docker compose -f docker-compose.prod.yml build --no-cache
+            
+            echo "🚀 Starting containers..."
+            docker compose -f docker-compose.prod.yml up -d
+            
+            echo "📊 Checking container status..."
+            docker compose -f docker-compose.prod.yml ps
+            
+            echo "📝 Showing logs..."
+            docker compose -f docker-compose.prod.yml logs --tail=50 bot
+            
+            echo "✅ Deployment completed successfully!"
+
+      - name: Health Check
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
+            echo "🏥 Running health checks..."
+            sleep 10
+            
+            # Check if containers are running
+            if docker compose -f /root/obuna.bot/docker-compose.prod.yml ps | grep -q "Up"; then
+              echo "✅ Containers are running"
+            else
+              echo "❌ Some containers are not running"
+              exit 1
+            fi
+            
+            # Check bot logs for errors
+            if docker compose -f /root/obuna.bot/docker-compose.prod.yml logs bot | grep -q "ERROR"; then
+              echo "⚠️ Errors found in bot logs"
+            else
+              echo "✅ No errors in bot logs"
+            fi
